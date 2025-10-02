@@ -31,13 +31,39 @@ export function DocumentTimeline({ searchQuery }: DocumentTimelineProps) {
   useEffect(() => {
     const fetchDocuments = async () => {
       try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (!session) return;
+
         const { data, error } = await supabase
           .from("documents")
-          .select("*")
-          .order("document_date", { ascending: false });
+          .select(`
+            *,
+            document_metadata (
+              category,
+              document_date,
+              doctor_name,
+              hospital_name,
+              summary
+            )
+          `)
+          .eq("user_id", session.user.id)
+          .order("upload_date", { ascending: false });
 
         if (error) throw error;
-        setDocuments(data || []);
+
+        const formattedData = (data || []).map((doc: any) => ({
+          id: doc.id,
+          title: doc.file_name,
+          category: doc.document_metadata?.category || "General",
+          document_date: doc.document_metadata?.document_date || doc.upload_date,
+          file_url: doc.file_path,
+          file_name: doc.file_name,
+          doctor_name: doc.document_metadata?.doctor_name,
+          hospital_name: doc.document_metadata?.hospital_name,
+          notes: doc.document_metadata?.summary
+        }));
+
+        setDocuments(formattedData);
       } catch (error: any) {
         toast({ title: "Error loading documents", description: error.message, variant: "destructive" });
       } finally {
@@ -74,13 +100,11 @@ export function DocumentTimeline({ searchQuery }: DocumentTimelineProps) {
 
   return (
     <div className="relative">
-      {/* Timeline line */}
       <div className="absolute left-8 top-0 bottom-0 w-px bg-border" />
 
       <div className="space-y-8">
-        {filteredDocuments.map((doc, index) => (
+        {filteredDocuments.map((doc) => (
           <div key={doc.id} className="relative pl-20">
-            {/* Timeline dot */}
             <div className="absolute left-6 top-2 w-5 h-5 rounded-full bg-primary border-4 border-background" />
 
             <Card className="p-4">

@@ -14,12 +14,19 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [uploadOpen, setUploadOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [profile, setProfile] = useState<any>(null);
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       if (!session) {
         navigate("/auth");
       } else {
+        const { data } = await supabase
+          .from("profiles")
+          .select("*")
+          .eq("id", session.user.id)
+          .maybeSingle();
+        setProfile(data);
         setLoading(false);
       }
     });
@@ -48,7 +55,9 @@ export default function Dashboard() {
             </div>
             <div>
               <h1 className="text-xl font-bold text-foreground">MediFile</h1>
-              <p className="text-xs text-muted-foreground">Medical Records Organizer</p>
+              {profile && (
+                <p className="text-xs text-muted-foreground">ID: {profile.patient_id}</p>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2">

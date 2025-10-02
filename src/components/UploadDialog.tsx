@@ -56,35 +56,42 @@ export function UploadDialog({ open, onOpenChange }: UploadDialogProps) {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
 
-      // Upload file to storage
       const fileExt = file.name.split(".").pop();
       const fileName = `${user.id}/${Date.now()}.${fileExt}`;
-      const { error: uploadError, data } = await supabase.storage
+      const { error: uploadError } = await supabase.storage
         .from("medical-documents")
         .upload(fileName, file);
 
       if (uploadError) throw uploadError;
 
-      // Get public URL
       const { data: { publicUrl } } = supabase.storage
         .from("medical-documents")
         .getPublicUrl(fileName);
 
-      // Insert document record
-      const { error: dbError } = await supabase.from("documents").insert({
-        user_id: user.id,
-        title: formData.title,
-        category: formData.category,
-        document_date: formData.document_date,
-        file_url: publicUrl,
-        file_name: file.name,
-        file_size: file.size,
-        doctor_name: formData.doctor_name || null,
-        hospital_name: formData.hospital_name || null,
-        notes: formData.notes || null,
-      });
+      const { data: docData, error: dbError } = await supabase
+        .from("documents")
+        .insert({
+          user_id: user.id,
+          file_name: formData.title,
+          file_path: publicUrl,
+          file_type: file.type,
+          file_size: file.size,
+        })
+        .select()
+        .single();
 
       if (dbError) throw dbError;
+
+      const { error: metaError } = await supabase.from("document_metadata").insert({
+        document_id: docData.id,
+        category: formData.category,
+        document_date: formData.document_date,
+        doctor_name: formData.doctor_name || null,
+        hospital_name: formData.hospital_name || null,
+        summary: formData.notes || null,
+      });
+
+      if (metaError) throw metaError;
 
       toast({ title: "Document uploaded successfully!" });
       onOpenChange(false);

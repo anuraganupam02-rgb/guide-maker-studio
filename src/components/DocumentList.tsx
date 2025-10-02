@@ -22,22 +22,52 @@ interface Document {
 
 interface DocumentListProps {
   searchQuery: string;
+  patientUserId?: string;
 }
 
-export function DocumentList({ searchQuery }: DocumentListProps) {
+export function DocumentList({ searchQuery, patientUserId }: DocumentListProps) {
   const { toast } = useToast();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
 
   const fetchDocuments = async () => {
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const userId = patientUserId || session.user.id;
+
       const { data, error } = await supabase
         .from("documents")
-        .select("*")
-        .order("document_date", { ascending: false });
+        .select(`
+          *,
+          document_metadata (
+            category,
+            document_date,
+            doctor_name,
+            hospital_name,
+            summary
+          )
+        `)
+        .eq("user_id", userId)
+        .order("upload_date", { ascending: false });
 
       if (error) throw error;
-      setDocuments(data || []);
+
+      const formattedData = (data || []).map((doc: any) => ({
+        id: doc.id,
+        title: doc.file_name,
+        category: doc.document_metadata?.category || "General",
+        document_date: doc.document_metadata?.document_date || doc.upload_date,
+        file_url: doc.file_path,
+        file_name: doc.file_name,
+        doctor_name: doc.document_metadata?.doctor_name,
+        hospital_name: doc.document_metadata?.hospital_name,
+        notes: doc.document_metadata?.summary,
+        created_at: doc.created_at
+      }));
+
+      setDocuments(formattedData);
     } catch (error: any) {
       toast({ title: "Error loading documents", description: error.message, variant: "destructive" });
     } finally {
@@ -58,7 +88,7 @@ export function DocumentList({ searchQuery }: DocumentListProps) {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+  }, [patientUserId]);
 
   const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this document?")) return;
@@ -147,9 +177,11 @@ export function DocumentList({ searchQuery }: DocumentListProps) {
                 <Download className="w-4 h-4" />
               </a>
             </Button>
-            <Button size="sm" variant="outline" onClick={() => handleDelete(doc.id)}>
-              <Trash2 className="w-4 h-4" />
-            </Button>
+            {!patientUserId && (
+              <Button size="sm" variant="outline" onClick={() => handleDelete(doc.id)}>
+                <Trash2 className="w-4 h-4" />
+              </Button>
+            )}
           </div>
         </Card>
       ))}
